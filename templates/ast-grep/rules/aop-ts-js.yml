@@ -1,0 +1,39 @@
+id: aop-ts-no-console-log
+language: TypeScript
+severity: error
+message: "AOP violation: route diagnostics through centralized logger instead of console.log in production TS."
+ignores:
+  - "**/tests/**"
+  - "**/*.test.*"
+  - "**/scripts/**"
+rule:
+  pattern: console.log($$$ARGS)
+---
+id: aop-js-no-console-log
+language: JavaScript
+severity: error
+message: "AOP violation: route diagnostics through centralized logger instead of console.log in production JS."
+ignores:
+  - "**/tests/**"
+  - "**/*.test.*"
+  - "**/scripts/**"
+rule:
+  pattern: console.log($$$ARGS)
+---
+id: aop-ts-no-empty-catch
+language: TypeScript
+severity: error
+message: "Swallowed exception: handle or log error via central AOP error policy."
+rule:
+  pattern: try { $$$BODY } catch ($ERR) { }
+---
+id: aop-ts-domain-no-fetch
+language: TypeScript
+severity: error
+message: "Layer/AOP violation: pure domain/types modules must not invoke fetch() directly."
+files:
+  - "**/domain/**"
+  - "**/types/**"
+  - "**/*Pure.ts"
+rule:
+  pattern: fetch($$$ARGS)

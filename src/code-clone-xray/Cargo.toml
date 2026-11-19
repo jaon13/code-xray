@@ -1,0 +1,53 @@
+[package]
+name = "code-clone-xray"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "High-speed multi-language (C#, XAML, Rust, TS/JS/Svelte, Python) structural clone detector, grep, and SQLite symbol indexer"
+autobins = false
+
+[[bin]]
+name = "structural-clone"
+path = "src/main.rs"
+
+[[bin]]
+name = "xray-index"
+path = "src/index_main.rs"
+
+[[bin]]
+name = "xray-grep"
+path = "src/grep_main.rs"
+
+[lib]
+name = "code_clone_xray"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+ignore = "0.4"
+rayon = "1.10"
+regex = "1.11"
+rusqlite = { version = "0.41", default-features = false, features = ["bundled"] }
+rustc-hash = "2.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tree-sitter = "0.25"
+tree-sitter-c-sharp = "0.23.5"
+tree-sitter-css = "0.23"
+tree-sitter-html = "0.23"
+tree-sitter-javascript = "0.23"
+tree-sitter-python = "0.23"
+tree-sitter-rust = "0.24"
+tree-sitter-typescript = "0.23"
+tree-sitter-xml = "0.7.0"
+
+[dev-dependencies]
+tempfile = "3.20"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

@@ -1,0 +1,43 @@
+id: aop-py-no-bare-except
+language: Python
+severity: error
+message: "AOP/Error violation: bare 'except:' swallows KeyboardInterrupt/SystemExit; catch explicit exception types."
+rule:
+  pattern: |
+    try:
+        $$$BODY
+    except:
+        $$$HANDLER
+---
+id: aop-py-decorator-missing-wraps
+language: Python
+severity: error
+message: "AOP violation: decorators defining an inner wrapper function must apply @functools.wraps."
+rule:
+  kind: decorated_definition
+  all:
+    - has:
+        kind: function_definition
+        has:
+          kind: block
+          has:
+            kind: function_definition
+    - not:
+        has:
+          pattern: functools.wraps($$$A)
+          stopBy: end
+    - not:
+        has:
+          pattern: wraps($$$A)
+          stopBy: end
+---
+id: aop-py-core-no-print
+language: Python
+severity: warning
+message: "AOP note: prefer logging facade over raw print() in library/core modules."
+files:
+  - "**/core/**"
+  - "**/domain/**"
+  - "**/deploy_core/**"
+rule:
+  pattern: print($$$ARGS)

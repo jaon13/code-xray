@@ -1,0 +1,23 @@
+# Reference Rust lint profiles (auto-selected by init_rust_governance.py).
+# Copy the matching [workspace.lints.*] (workspace) or [lints.*] (single crate) block.
+
+# === PROFILE: server-async (tokio / axum / tauri / hyper / tonic) ===
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+missing_safety_doc = "deny"
+undocumented_unsafe_blocks = "deny"
+not_unsafe_ptr_arg_deref = "deny"
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+await_holding_lock = "deny"
+await_holding_refcell_ref = "deny"
+let_underscore_must_use = "warn"
+large_futures = "warn"

@@ -1,0 +1,22 @@
+id: aop-html-no-inline-style
+language: Html
+severity: error
+message: "AOP/CSP violation: avoid inline style attributes; use CSS classes and design tokens."
+rule:
+  kind: attribute
+  regex: '^style\s*='
+---
+id: aop-html-no-inline-handler
+language: Html
+severity: error
+message: "FP/AOP/CSP violation: avoid inline on* event handlers in HTML; bind handlers in JS/TS."
+rule:
+  kind: attribute
+  regex: '^on[a-z]+\s*='
+---
+id: aop-css-no-important
+language: Css
+severity: error
+message: "OOP/Specificity violation: avoid !important; control cascade order with @layer."
+rule:
+  pattern: "$PROP: $VAL !important;"

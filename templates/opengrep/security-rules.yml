@@ -1,0 +1,55 @@
+rules:
+  - id: sec-js-no-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Security: dynamic eval/Function execution is forbidden."
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+
+  - id: sec-js-no-innerhtml-assignment
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "XSS risk: avoid direct innerHTML/outerHTML assignment without trusted sanitizer."
+    pattern-either:
+      - pattern: $EL.innerHTML = $VAL
+      - pattern: $EL.outerHTML = $VAL
+
+  - id: sec-py-subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: "Command injection risk: pass argument list with shell=False instead of shell=True."
+    pattern: subprocess.$FUNC(..., shell=True, ...)
+
+  - id: sec-py-yaml-unsafe-load
+    languages: [python]
+    severity: ERROR
+    message: "Deserialization risk: use yaml.safe_load instead of yaml.load."
+    pattern: yaml.load($DATA)
+
+  - id: sec-py-taint-sql-format
+    languages: [python]
+    mode: taint
+    severity: ERROR
+    message: "SQL injection risk: untrusted input reaches SQL execution via string formatting."
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: request.json
+      - pattern: sys.argv[...]
+    pattern-sinks:
+      - pattern: $CURSOR.execute($QUERY, ...)
+      - pattern: sqlite3.connect(...).execute($QUERY, ...)
+
+  - id: sec-cs-sql-raw-interp
+    languages: [csharp]
+    severity: ERROR
+    message: "SQL injection risk: avoid interpolated strings in SQL command execution; use parameters."
+    pattern-either:
+      - pattern: $CMD.CommandText = $"...";
+      - pattern: FromSqlRaw($"...")
+
+  - id: sec-rs-sqlx-format
+    languages: [rust]
+    severity: WARNING
+    message: "SQL safety: avoid format!() directly inside sqlx::query(&format!(...)); bind parameters instead."
+    pattern: sqlx::query(&format!(...))

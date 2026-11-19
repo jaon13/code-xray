@@ -1,0 +1,9 @@
+# Modern .NET 10 Banned APIs (RS0030)
+M:System.Threading.Tasks.Task.ConfigureAwait(System.Boolean);code-consistency: ConfigureAwait(...) is banned across the codebase.
+M:System.Threading.Tasks.Task`1.ConfigureAwait(System.Boolean);code-consistency: ConfigureAwait(...) is banned across the codebase.
+M:System.Threading.Tasks.Task.ConfigureAwait(System.Threading.Tasks.ConfigureAwaitOptions);code-consistency: ConfigureAwait(...) is banned across the codebase.
+M:System.Threading.Tasks.Task`1.ConfigureAwait(System.Threading.Tasks.ConfigureAwaitOptions);code-consistency: ConfigureAwait(...) is banned across the codebase.
+M:System.Threading.Tasks.ValueTask.ConfigureAwait(System.Boolean);code-consistency: ConfigureAwait(...) is banned across the codebase.
+M:System.Threading.Tasks.ValueTask`1.ConfigureAwait(System.Boolean);code-consistency: ConfigureAwait(...) is banned across the codebase.
+T:System.Runtime.InteropServices.DllImportAttribute;code-consistency: Legacy [DllImport] is banned. Use [LibraryImport].
+N:Serilog;code-consistency: Hardcoding Serilog is banned.

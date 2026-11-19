@@ -1,0 +1,53 @@
+<Project>
+  <!-- Self-governance for CodeXray (.NET 10 Analyzers, SARIF v2.1, BannedApiAnalyzers) -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
+
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>10.0-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <SarifOutputDir>$(MSBuildThisFileDirectory)Build/sarif/$(Configuration)/</SarifOutputDir>
+    <ErrorLog Condition="!$(MSBuildProjectName.EndsWith('_wpftmp'))">$(SarifOutputDir)$(MSBuildProjectName).sarif,version=2.1</ErrorLog>
+
+    <NoWarn>$(NoWarn);NU1901;NU1902;NU1903;NU1904;NU1510</NoWarn>
+  </PropertyGroup>
+
+  <Target Name="EnsureSarifOutputDirectory"
+          BeforeTargets="CoreCompile"
+          Condition="!$(MSBuildProjectName.EndsWith('_wpftmp')) and '$(SarifOutputDir)' != ''">
+    <MakeDir Directories="$(SarifOutputDir)" />
+  </Target>
+
+  <ItemGroup Condition="!$(MSBuildProjectName.EndsWith('_wpftmp'))">
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="4.14.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.12.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Meziantou.Analyzer" Version="3.0.324">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Roslynator.Analyzers" Version="5.0.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="IDisposableAnalyzers" Version="4.0.8">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.35.0.4138">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" Visible="false" />
+  </ItemGroup>
+</Project>

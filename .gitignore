@@ -1,0 +1,18 @@
+# Build / Runtime outputs
+Build/
+bin/
+dist/
+src/**/bin/
+src/**/obj/
+src/**/target/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# IDE & X-Ray runtime artifacts
+.vs/
+.idea/
+*.user
+.xray/

@@ -1,0 +1,34 @@
+id: aop-cs-no-empty-catch
+language: CSharp
+severity: error
+message: "AOP/Error violation: empty catch block swallows failures silently."
+rule:
+  pattern: try { $$$BODY } catch { }
+---
+id: aop-cs-no-console-writeline
+language: CSharp
+severity: warning
+message: "AOP violation: use project log facade (EngineLog / Log.*) instead of Console.WriteLine."
+ignores:
+  - "**/tests/**"
+  - "**/*Tests/**"
+rule:
+  pattern: Console.WriteLine($$$ARGS)
+---
+id: aop-rs-no-unwrap
+language: Rust
+severity: error
+message: "Panic safety: avoid .unwrap() in production Rust; propagate with ? or handle explicitly."
+ignores:
+  - "**/tests/**"
+  - "**/*_tests.rs"
+  - "**/tests.rs"
+rule:
+  pattern: $EXPR.unwrap()
+  not:
+    inside:
+      kind: mod_item
+      has:
+        kind: identifier
+        regex: "^tests$"
+      stopBy: end
