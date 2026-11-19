@@ -1,0 +1,55 @@
+name: CodeXray Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-bundle:
+    name: Bundle (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-amd64
+          - os: windows-latest
+            label: windows-amd64
+          - os: macos-latest
+            label: darwin-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build & Package CodeXray Bundle
+        run: python scripts/publish_tools.py --skip-tests --package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.label }}
+          path: dist/CodeXray-*.zip
+
+  publish-release:
+    needs: build-bundle
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/CodeXray-*.zip

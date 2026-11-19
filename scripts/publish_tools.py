@@ -205,31 +205,69 @@ def register_mcp_configs(mcp_entry: Path) -> None:
         print(f"  -> Registered code-xray in {cfg_path}")
 
     tooling_path = Path(os.environ.get("TOOLING_JSON", str(home / ".agents" / "tooling.json")))
+    t_data: dict = {}
     if tooling_path.is_file():
-        t_data = json.loads(tooling_path.read_text(encoding="utf-8-sig"))
-        if isinstance(t_data, dict):
-            t_data.pop("roslynGraphMcpExe", None)
-            t_data["codeXrayMcpExe"] = str(mcp_entry)
-            tooling_path.write_text(json.dumps(t_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-            print(f"  -> Synced codeXrayMcpExe in {tooling_path}")
+        loaded = json.loads(tooling_path.read_text(encoding="utf-8-sig"))
+        if isinstance(loaded, dict):
+            t_data = loaded
+    t_data.pop("roslynGraphMcpExe", None)
+    t_data.setdefault("codeXrayRoot", str(ROOT_DIR))
+    if Path(str(t_data.get("codeXrayRoot", ""))).resolve() == ROOT_DIR.resolve():
+        t_data["codeXrayRoot"] = str(ROOT_DIR)
+    t_data["codeXrayMcpExe"] = str(mcp_entry)
+    tooling_path.parent.mkdir(parents=True, exist_ok=True)
+    tooling_path.write_text(json.dumps(t_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"  -> Synced codeXrayRoot & codeXrayMcpExe in {tooling_path}")
+
+
+def install_global_wrappers() -> None:
+    wrappers_dir = ROOT_DIR / "wrappers"
+    if not wrappers_dir.is_dir():
+        print(f"  -> Skipped wrapper install (missing {wrappers_dir})")
+        return
+
+    home = Path.home()
+    agents_dir = home / ".agents"
+    bin_dir = agents_dir / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+
+    copies = [
+        (wrappers_dir / "xray_run.py", bin_dir / "xray_run.py"),
+        (wrappers_dir / "codexray-hook.py", bin_dir / "codexray-hook.py"),
+        (wrappers_dir / "sync_tooling.py", agents_dir / "sync_tooling.py"),
+    ]
+    for src, dst in copies:
+        if not src.is_file():
+            continue
+        shutil.copy2(src, dst)
+        if not is_windows():
+            dst.chmod(dst.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        print(f"  -> Installed wrapper {dst}")
 
 
 def create_portable_bundle() -> Path:
     os_tag = platform.system().lower()
-    arch_tag = platform.machine().lower()
+    raw_arch = platform.machine().lower()
+    arch_tag = {
+        "x86_64": "amd64",
+        "amd64": "amd64",
+        "aarch64": "arm64",
+        "arm64": "arm64",
+    }.get(raw_arch, raw_arch)
     DIST_DIR.mkdir(parents=True, exist_ok=True)
     zip_path = DIST_DIR / f"CodeXray-{os_tag}-{arch_tag}.zip"
 
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for folder in (BIN_DIR, ROOT_DIR / "scripts"):
+        for folder in (BIN_DIR, ROOT_DIR / "scripts", ROOT_DIR / "templates", ROOT_DIR / "wrappers"):
             if not folder.exists():
                 continue
             for item in folder.rglob("*"):
                 if item.is_file() and "__pycache__" not in item.parts:
                     zf.write(item, item.relative_to(ROOT_DIR))
-        readme = ROOT_DIR / "README.md"
-        if readme.is_file():
-            zf.write(readme, "README.md")
+        for doc_name in ("README.md", "LICENSE", "install.ps1", "install.sh"):
+            doc_path = ROOT_DIR / doc_name
+            if doc_path.is_file():
+                zf.write(doc_path, doc_name)
 
     print(f"  -> Portable archive created: {zip_path}")
     return zip_path
@@ -239,11 +277,16 @@ def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
-    parser = argparse.ArgumentParser(description="Build, publish, and package 01.CodeXray.")
+    parser = argparse.ArgumentParser(description="Build, publish, and package CodeXray.")
     parser.add_argument("--skip-rust", action="store_true", help="Skip Rust cargo build")
     parser.add_argument("--skip-dotnet", action="store_true", help="Skip .NET MCP publish")
     parser.add_argument("--skip-tests", action="store_true", help="Skip cargo test before release build")
     parser.add_argument("--register-mcp", action="store_true", help="Update ~/.cursor and ~/.gemini MCP configs")
+    parser.add_argument(
+        "--install-wrappers",
+        action="store_true",
+        help="Install ~/.agents/bin/{xray_run.py,codexray-hook.py} and ~/.agents/sync_tooling.py",
+    )
     parser.add_argument("--kill-running", action="store_true", help="Terminate running CodeXrayMcp processes before replacing bin/")
     parser.add_argument("--package", action="store_true", help="Create portable dist/CodeXray-<os>-<arch>.zip")
     args = parser.parse_args()
@@ -256,6 +299,9 @@ def main() -> int:
         mcp_entry = publish_code_xray_mcp(kill_running=args.kill_running)
     elif not mcp_entry.is_file():
         mcp_entry = MCP_OUT_DIR / "CodeXrayMcp.dll"
+
+    if args.install_wrappers:
+        install_global_wrappers()
 
     if args.register_mcp and mcp_entry.is_file():
         register_mcp_configs(mcp_entry)

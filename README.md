@@ -11,6 +11,22 @@ Standalone, cross-platform static analysis, multi-language SQLite symbol/slice i
 | `structural-clone` | Full AST token normalization | Full AST + `#[cfg(test)]` filtering | Full AST normalization | `<script>` TS/JS + `<style>` CSS | Full AST normalization | HTML / CSS |
 | `CodeXrayMcp` (`code-xray` MCP) | Full SQLite + Roslyn semantic callers/blast radius | SQLite graph slice, overview, deps, grep, clones | SQLite graph slice, overview, deps, grep, clones | SQLite graph slice, overview, deps, grep, clones | SQLite graph slice, overview, deps, grep, clones | Grep review |
 
+## Quick Install (1-Line Setup)
+
+Installs `CodeXray` under `~/.agents/code-xray`, deploys global wrappers (`~/.agents/bin/{xray_run.py,codexray-hook.py}`), initializes `~/.agents/tooling.json`, and registers `"code-xray"` in Antigravity (`~/.gemini/config/mcp_config.json`) & Cursor (`~/.cursor/mcp.json`). Uses prebuilt GitHub Release bundles when available and falls back cleanly to a local source build (`cargo` + `.NET 10 SDK`).
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/jaon13/code-xray/main/install.ps1 | iex
+```
+
+**macOS / Linux (Bash):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/jaon13/code-xray/main/install.sh | bash
+```
+
+---
+
 ## Directory Structure
 
 ```text
@@ -61,11 +77,11 @@ To cross-scan external shared libraries during `find_structural_clones`, configu
 - Repository `.xray/config.json`: `{ "sharedRoots": ["../shared-core"] }`
 - Global `~/.agents/tooling.json`: `{ "sharedRoots": ["..."] }`
 
-## Quick Start (Windows / Linux / macOS)
+## Quick Start (From Cloned Repo)
 
-### 1. Build & Register `code-xray` MCP
+### 1. Build, Install Wrappers & Register `code-xray` MCP
 ```bash
-python scripts/publish_tools.py --register-mcp
+python scripts/publish_tools.py --register-mcp --install-wrappers
 ```
 If `CodeXrayMcp` is held open by a running IDE MCP client, `publish_tools.py` stages a side-by-side copy under `bin/code-xray-mcp-live/` and updates `~/.cursor/mcp.json`, `~/.gemini/config/mcp_config.json`, and `~/.agents/tooling.json`.
 
@@ -73,7 +89,7 @@ If `CodeXrayMcp` is held open by a running IDE MCP client, `publish_tools.py` st
 ```bash
 python scripts/publish_tools.py --package
 ```
-Produces `dist/CodeXray-<os>-<arch>.zip` with prebuilt binaries and Python scripts. Extract on another machine and run:
+Produces `dist/CodeXray-<os>-<arch>.zip` with prebuilt binaries, templates, wrappers, and Python scripts. Extract on another machine and run:
 ```bash
-python scripts/publish_tools.py --skip-rust --skip-dotnet --register-mcp
+python scripts/publish_tools.py --skip-rust --skip-dotnet --register-mcp --install-wrappers
 ```
