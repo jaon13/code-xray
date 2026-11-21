@@ -13,6 +13,7 @@ use super::model::{
     DiscoveredFile, ExtractedFileData, ExtractedMessengerLink, ExtractedType, ExtractedTypeRef,
 };
 use super::path_utils::fnv1a_128_hex;
+use super::state_extractor::{extract_assignment_states, extract_field_init_states, StateContext};
 
 pub fn extract_csharp_file(file: &DiscoveredFile, bytes: &[u8]) -> Result<ExtractedFileData> {
     let content = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes);
@@ -38,6 +39,7 @@ pub fn extract_csharp_file(file: &DiscoveredFile, bytes: &[u8]) -> Result<Extrac
         type_refs: ctx.type_refs,
         di_regs: ctx.di_regs,
         messenger_links: ctx.messenger_links,
+        state_transitions: ctx.state_transitions,
     })
 }
 
@@ -79,7 +81,37 @@ fn walk_node(node: Node<'_>, src: &[u8], ctx: &mut FileCtx) {
             return;
         }
         "enum_member_declaration" => handle_enum_member(node, src, ctx),
-        "field_declaration" | "event_field_declaration" => handle_field(node, src, ctx),
+        "field_declaration" | "event_field_declaration" => {
+            handle_field(node, src, ctx);
+            let owner = ctx.type_stack.last().cloned().unwrap_or_default();
+            let member = ctx.member_stack.last().cloned().unwrap_or_default();
+            extract_field_init_states(
+                node,
+                StateContext {
+                    src,
+                    line_offset: 0,
+                    owner_type: &owner,
+                    trigger_member: &member,
+                },
+                &mut ctx.seen_states,
+                &mut ctx.state_transitions,
+            );
+        }
+        "assignment_expression" => {
+            let owner = ctx.type_stack.last().cloned().unwrap_or_default();
+            let member = ctx.member_stack.last().cloned().unwrap_or_default();
+            extract_assignment_states(
+                node,
+                StateContext {
+                    src,
+                    line_offset: 0,
+                    owner_type: &owner,
+                    trigger_member: &member,
+                },
+                &mut ctx.seen_states,
+                &mut ctx.state_transitions,
+            );
+        }
         "string_literal" => handle_string_literal(node, src, ctx),
         "invocation_expression" => handle_invocation(node, src, ctx),
         "object_creation_expression" => handle_object_creation(node, src, ctx),

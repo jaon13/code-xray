@@ -53,6 +53,7 @@ pub fn extract_xaml_file(file: &DiscoveredFile, bytes: &[u8]) -> Result<Extracte
         type_refs,
         di_regs: Vec::new(),
         messenger_links: Vec::new(),
+        state_transitions: Vec::new(),
     })
 }
 

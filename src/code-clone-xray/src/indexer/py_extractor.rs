@@ -12,6 +12,7 @@ use super::model::{
     DiscoveredFile, ExtractedCall, ExtractedDiReg, ExtractedFileData, ExtractedMember,
     ExtractedMessengerLink, ExtractedType,
 };
+use super::state_extractor::{extract_assignment_states, StateContext};
 
 struct PyWalker<'a> {
     src: &'a [u8],
@@ -107,6 +108,21 @@ fn walk_py(node: Node<'_>, w: &mut PyWalker<'_>, total_lines: u32) {
             return;
         }
         "import_statement" | "import_from_statement" => handle_py_import(node, w),
+        "assignment" => {
+            let owner = w.current_owner();
+            let member = w.member_stack.last().cloned().unwrap_or_default();
+            extract_assignment_states(
+                node,
+                StateContext {
+                    src: w.src,
+                    line_offset: 0,
+                    owner_type: &owner,
+                    trigger_member: &member,
+                },
+                &mut w.ctx.seen_states,
+                &mut w.ctx.state_transitions,
+            );
+        }
         "call" => handle_py_call(node, w),
         _ => {}
     }

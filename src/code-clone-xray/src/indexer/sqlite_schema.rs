@@ -3,7 +3,7 @@ use std::time::Duration;
 use anyhow::Result;
 use rusqlite::Connection;
 
-pub const SCHEMA_VERSION: &str = "1";
+pub const SCHEMA_VERSION: &str = "2";
 
 pub fn ensure_schema(conn: &Connection) -> Result<()> {
     conn.busy_timeout(Duration::from_millis(10_000))?;
@@ -123,6 +123,18 @@ pub fn ensure_schema(conn: &Connection) -> Result<()> {
             line INTEGER NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS state_transitions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+            owner_type TEXT NOT NULL,
+            machine_name TEXT NOT NULL,
+            from_state TEXT NOT NULL,
+            to_state TEXT NOT NULL,
+            trigger_member TEXT NOT NULL,
+            guard_expr TEXT NOT NULL,
+            line INTEGER NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_files_rel ON files(rel_path);
         CREATE INDEX IF NOT EXISTS idx_files_proj ON files(project_name);
         CREATE INDEX IF NOT EXISTS idx_types_name ON types(name);
@@ -138,6 +150,8 @@ pub fn ensure_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_di_impl ON di_registrations(impl_type);
         CREATE INDEX IF NOT EXISTS idx_msg_owner ON messenger_links(owner_type);
         CREATE INDEX IF NOT EXISTS idx_msg_type ON messenger_links(message_type);
+        CREATE INDEX IF NOT EXISTS idx_state_owner ON state_transitions(owner_type);
+        CREATE INDEX IF NOT EXISTS idx_state_machine ON state_transitions(machine_name);
         "#,
     )?;
     Ok(())

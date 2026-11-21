@@ -6,7 +6,7 @@ use code_clone_xray::grep::{run_grep_command, GrepArgs};
 use code_clone_xray::indexer::{
     build_or_refresh_index, ensure_fresh_db,
     slice_query::query_feature_slice,
-    sqlite_query::{query_deps, query_partials, query_search, query_status},
+    sqlite_query::{query_deps, query_partials, query_search, query_states, query_status},
 };
 
 #[derive(Parser)]
@@ -90,6 +90,16 @@ enum Commands {
         #[arg(long, default_value_t = false)]
         no_refresh: bool,
     },
+    States {
+        #[arg(short = 'r', long, default_value = ".")]
+        root: PathBuf,
+        #[arg(short = 't', long)]
+        target: Option<String>,
+        #[arg(long)]
+        db: Option<PathBuf>,
+        #[arg(long, default_value_t = false)]
+        no_refresh: bool,
+    },
     Grep(GrepArgs),
 }
 
@@ -164,6 +174,16 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             let conn = ensure_fresh_db(&root, db.as_deref(), !no_refresh, true)?;
             let hits = query_search(&conn, &query, kind.as_deref(), limit)?;
             serde_json::to_string_pretty(&hits)?
+        }
+        Commands::States {
+            root,
+            target,
+            db,
+            no_refresh,
+        } => {
+            let conn = ensure_fresh_db(&root, db.as_deref(), !no_refresh, true)?;
+            let report = query_states(&conn, target.as_deref())?;
+            serde_json::to_string_pretty(&report)?
         }
         Commands::Grep(args) => run_grep_command(&args)?,
     };

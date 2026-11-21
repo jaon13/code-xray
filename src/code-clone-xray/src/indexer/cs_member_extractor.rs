@@ -7,8 +7,8 @@ use super::cs_syntax_utils::{
     is_constant_key_literal, is_interesting_type, line_1, node_text, truncate_sig,
 };
 use super::model::{
-    ExtractedCall, ExtractedDiReg, ExtractedMember, ExtractedMessengerLink, ExtractedType,
-    ExtractedTypeRef,
+    ExtractedCall, ExtractedDiReg, ExtractedMember, ExtractedMessengerLink,
+    ExtractedStateTransition, ExtractedType, ExtractedTypeRef,
 };
 
 #[derive(Default)]
@@ -17,12 +17,14 @@ pub struct FileCtx {
     pub type_stack: Vec<String>,
     pub member_stack: Vec<String>,
     pub seen_keys: FxHashSet<(String, String)>,
+    pub seen_states: FxHashSet<(String, String, String, String, String, String)>,
     pub types: Vec<ExtractedType>,
     pub members: Vec<ExtractedMember>,
     pub calls: Vec<ExtractedCall>,
     pub type_refs: Vec<ExtractedTypeRef>,
     pub di_regs: Vec<ExtractedDiReg>,
     pub messenger_links: Vec<ExtractedMessengerLink>,
+    pub state_transitions: Vec<ExtractedStateTransition>,
 }
 
 pub fn handle_invocation(node: Node<'_>, src: &[u8], ctx: &mut FileCtx) {

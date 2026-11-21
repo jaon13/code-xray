@@ -241,3 +241,123 @@ fn concurrent_builds_serialize_via_build_lock_without_duplicate_parse() {
 
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn extracts_csharp_state_transitions_and_switch_arms() {
+    let sample = br#"
+namespace Demo.App;
+
+public enum RunState { Idle, Running, Paused, Alarm }
+
+public sealed class WaferRunner
+{
+    private RunState _state = RunState.Idle;
+
+    public void Start()
+    {
+        if (_state == RunState.Idle)
+        {
+            _state = RunState.Running;
+        }
+    }
+
+    public void Pause()
+    {
+        switch (_state)
+        {
+            case RunState.Running:
+                _state = RunState.Paused;
+                break;
+        }
+    }
+
+    public void HandleFault()
+    {
+        _state = _state switch
+        {
+            RunState.Paused => RunState.Alarm,
+            _ => RunState.Alarm,
+        };
+    }
+}
+"#;
+    let file = DiscoveredFile {
+        project_name: "Demo.App".to_string(),
+        rel_path: "WaferRunner.cs".to_string(),
+        abs_path: "WaferRunner.cs".to_string(),
+        lang: "cs",
+        mtime_ns: 0,
+        size_bytes: sample.len() as i64,
+    };
+    let extracted = extract_csharp_file(&file, sample).expect("extract cs states");
+    let pairs: Vec<(&str, &str, &str, &str)> = extracted
+        .state_transitions
+        .iter()
+        .map(|s| {
+            (
+                s.machine_name.as_str(),
+                s.from_state.as_str(),
+                s.to_state.as_str(),
+                s.trigger_member.as_str(),
+            )
+        })
+        .collect();
+    assert!(pairs.contains(&("RunState", "(init)", "Idle", "<init>")));
+    assert!(pairs.contains(&("RunState", "Idle", "Running", "Start")));
+    assert!(pairs.contains(&("RunState", "Running", "Paused", "Pause")));
+    assert!(pairs.contains(&("RunState", "Paused", "Alarm", "HandleFault")));
+}
+
+#[test]
+fn upgrading_v1_schema_reindexes_and_detects_orphan_terminal_states() {
+    let root = make_temp_dir("state_v1_upgrade");
+    let proj_dir = root.join("src").join("Demo.App");
+    fs::create_dir_all(&proj_dir).expect("mkdir");
+    fs::write(
+        root.join("Demo.slnx"),
+        "<Solution><Project Path=\"src/Demo.App/Demo.App.csproj\" /></Solution>\n",
+    )
+    .expect("slnx");
+    fs::write(
+        proj_dir.join("Demo.App.csproj"),
+        "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>\n",
+    )
+    .expect("csproj");
+    fs::write(
+        proj_dir.join("Runner.cs"),
+        "namespace Demo.App;\npublic enum RunState { Idle, Running, Alarm }\npublic sealed class Runner {\n    private RunState _state = RunState.Idle;\n    public void Run() { if (_state == RunState.Idle) { _state = RunState.Running; } }\n    public void Trip() { if (_state == RunState.Running) { _state = RunState.Alarm; } }\n}\n",
+    )
+    .expect("cs");
+
+    let first = build_or_refresh_index(&root, None, false, false).expect("initial build");
+    assert!(first.total_state_transitions >= 3);
+
+    // Simulate legacy schema_version = 1 index with empty state_transitions table.
+    let db_path = root.join(".xray").join("index.db");
+    let conn = open_db(&db_path).expect("open db");
+    conn.execute(
+        "UPDATE meta SET value = '1' WHERE key = 'schema_version'",
+        [],
+    )
+    .expect("downgrade meta");
+    conn.execute("DELETE FROM state_transitions", [])
+        .expect("clear states");
+    drop(conn);
+
+    let upgraded = build_or_refresh_index(&root, None, false, false).expect("upgrade build");
+    assert_eq!(upgraded.parsed_files, 1);
+    assert!(upgraded.total_state_transitions >= 3);
+
+    let conn2 = open_db(&db_path).expect("reopen");
+    let states = super::sqlite_query::query_states(&conn2, Some("Runner")).expect("query_states");
+    assert_eq!(states.machines, vec!["RunState".to_string()]);
+    assert!(states
+        .orphan_terminal_states
+        .contains(&"RunState.Alarm".to_string()));
+    assert!(!states
+        .orphan_terminal_states
+        .contains(&"RunState.Running".to_string()));
+    drop(conn2);
+
+    let _ = fs::remove_dir_all(&root);
+}

@@ -10,6 +10,7 @@ use super::extract_utils::{
 };
 use super::model::{DiscoveredFile, ExtractedFileData, ExtractedMember, ExtractedType};
 use super::rs_links::{extract_rs_call_links, extract_rs_use_refs, rs_visibility};
+use super::state_extractor::{extract_assignment_states, extract_field_init_states, StateContext};
 
 struct RsWalker<'a> {
     src: &'a [u8],
@@ -160,6 +161,36 @@ fn walk_rs(node: Node<'_>, w: &mut RsWalker<'_>, total_lines: u32) {
             let caller = w.current_owner();
             let member = w.member_stack.last().cloned().unwrap_or_default();
             extract_rs_call_links(node, w.src, &caller, &member, &mut w.ctx);
+        }
+        "assignment_expression" => {
+            let owner = w.current_owner();
+            let member = w.member_stack.last().cloned().unwrap_or_default();
+            extract_assignment_states(
+                node,
+                StateContext {
+                    src: w.src,
+                    line_offset: 0,
+                    owner_type: &owner,
+                    trigger_member: &member,
+                },
+                &mut w.ctx.seen_states,
+                &mut w.ctx.state_transitions,
+            );
+        }
+        "let_declaration" | "field_initializer" => {
+            let owner = w.current_owner();
+            let member = w.member_stack.last().cloned().unwrap_or_default();
+            extract_field_init_states(
+                node,
+                StateContext {
+                    src: w.src,
+                    line_offset: 0,
+                    owner_type: &owner,
+                    trigger_member: &member,
+                },
+                &mut w.ctx.seen_states,
+                &mut w.ctx.state_transitions,
+            );
         }
         _ => {}
     }

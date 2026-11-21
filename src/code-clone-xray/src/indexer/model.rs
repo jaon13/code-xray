@@ -80,6 +80,17 @@ pub struct ExtractedMessengerLink {
 }
 
 #[derive(Clone, Debug)]
+pub struct ExtractedStateTransition {
+    pub owner_type: String,
+    pub machine_name: String,
+    pub from_state: String,
+    pub to_state: String,
+    pub trigger_member: String,
+    pub guard_expr: String,
+    pub line: u32,
+}
+
+#[derive(Clone, Debug)]
 pub struct ExtractedFileData {
     pub file: DiscoveredFile,
     pub content_hash: String,
@@ -90,6 +101,7 @@ pub struct ExtractedFileData {
     pub type_refs: Vec<ExtractedTypeRef>,
     pub di_regs: Vec<ExtractedDiReg>,
     pub messenger_links: Vec<ExtractedMessengerLink>,
+    pub state_transitions: Vec<ExtractedStateTransition>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -106,6 +118,7 @@ pub struct BuildSummary {
     pub removed_files: usize,
     pub total_types: usize,
     pub total_calls: usize,
+    pub total_state_transitions: usize,
 }
 
 #[derive(Clone, Debug, Serialize)]

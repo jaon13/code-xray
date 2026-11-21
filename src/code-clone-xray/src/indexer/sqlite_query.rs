@@ -1,10 +1,13 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use anyhow::Result;
 use rusqlite::{params, Connection};
 use rustc_hash::FxHashMap;
 
 use super::model::{PartialCluster, PartialFileSpan};
 pub use super::query_models::{
-    DepsReport, DiLinkRow, MessengerRow, SearchHit, StatusReport, TypeRefRow,
+    DepsReport, DiLinkRow, MessengerRow, SearchHit, StateTransitionRow, StatesReport, StatusReport,
+    TypeRefRow,
 };
 
 pub fn query_status(conn: &Connection) -> Result<StatusReport> {
@@ -25,6 +28,7 @@ pub fn query_status(conn: &Connection) -> Result<StatusReport> {
         type_refs: count("SELECT COUNT(*) FROM type_refs"),
         di_registrations: count("SELECT COUNT(*) FROM di_registrations"),
         messenger_links: count("SELECT COUNT(*) FROM messenger_links"),
+        state_transitions: count("SELECT COUNT(*) FROM state_transitions"),
     })
 }
 
@@ -202,6 +206,68 @@ fn map_search_hit(r: &rusqlite::Row<'_>) -> rusqlite::Result<SearchHit> {
         project: r.get(3)?,
         file: r.get(4)?,
         line: r.get(5)?,
+    })
+}
+
+pub fn query_states(conn: &Connection, target: Option<&str>) -> Result<StatesReport> {
+    let clean_target = target.map(str::trim).unwrap_or("");
+    let filter_pat = if clean_target.is_empty() {
+        "%".to_string()
+    } else {
+        format!("%{}%", clean_target.to_ascii_lowercase())
+    };
+
+    let mut stmt = conn.prepare(
+        "SELECT s.owner_type, s.machine_name, s.from_state, s.to_state, s.trigger_member, s.guard_expr, f.rel_path, s.line \
+         FROM state_transitions s \
+         JOIN files f ON f.id = s.file_id \
+         WHERE (?1 = '%' OR LOWER(s.owner_type) LIKE ?1 OR LOWER(s.machine_name) LIKE ?1 OR LOWER(f.rel_path) LIKE ?1) \
+         ORDER BY s.owner_type, s.machine_name, s.line",
+    )?;
+    let transitions: Vec<StateTransitionRow> = stmt
+        .query_map(params![filter_pat], |r| {
+            Ok(StateTransitionRow {
+                owner_type: r.get(0)?,
+                machine_name: r.get(1)?,
+                from_state: r.get(2)?,
+                to_state: r.get(3)?,
+                trigger_member: r.get(4)?,
+                guard_expr: r.get(5)?,
+                file: r.get(6)?,
+                line: r.get(7)?,
+            })
+        })?
+        .flatten()
+        .collect();
+
+    let mut by_machine: BTreeMap<String, (BTreeSet<String>, BTreeSet<String>)> = BTreeMap::new();
+    for tr in &transitions {
+        let entry = by_machine
+            .entry(tr.machine_name.clone())
+            .or_insert_with(|| (BTreeSet::new(), BTreeSet::new()));
+        if tr.from_state != "(init)" && tr.from_state != "*" {
+            entry.0.insert(tr.from_state.clone());
+        }
+        if tr.to_state != "(init)" && tr.to_state != "*" {
+            entry.1.insert(tr.to_state.clone());
+        }
+    }
+
+    let machines: Vec<String> = by_machine.keys().cloned().collect();
+    let mut orphan_terminal_states = Vec::new();
+    for (machine, (from_set, to_set)) in &by_machine {
+        for st in to_set {
+            if !from_set.contains(st) {
+                orphan_terminal_states.push(format!("{machine}.{st}"));
+            }
+        }
+    }
+
+    Ok(StatesReport {
+        target: clean_target.to_string(),
+        machines,
+        orphan_terminal_states,
+        transitions,
     })
 }
 

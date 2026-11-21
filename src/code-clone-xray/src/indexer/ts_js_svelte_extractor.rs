@@ -6,12 +6,10 @@ use super::cs_member_extractor::FileCtx;
 use super::cs_syntax_utils::{compact_whitespace, count_lines, node_text, truncate_sig};
 use super::extract_utils::{
     build_file_data, collect_pascal_refs_from_text, derive_file_stem, derive_module_namespace,
-    push_unique_ref, split_callee, strip_utf8_bom,
+    strip_utf8_bom,
 };
-use super::model::{
-    DiscoveredFile, ExtractedCall, ExtractedDiReg, ExtractedFileData, ExtractedMember,
-    ExtractedMessengerLink, ExtractedType,
-};
+use super::model::{DiscoveredFile, ExtractedFileData, ExtractedMember, ExtractedType};
+use super::state_extractor::{extract_assignment_states, extract_field_init_states, StateContext};
 use crate::parse::svelte::{extract_svelte_blocks, SvelteBlockKind};
 
 struct WebWalker<'a> {
@@ -177,10 +175,31 @@ fn walk_web(
             if handle_web_declarator(node, w, container_kind, total_lines) {
                 return;
             }
+            record_web_state(node, w, true);
         }
-        "public_field_definition" | "property_definition" => handle_web_field(node, w),
-        "import_statement" => handle_web_import(node, w),
-        "call_expression" | "new_expression" => handle_web_call(node, w),
+        "public_field_definition" | "property_definition" => {
+            handle_web_field(node, w);
+            record_web_state(node, w, true);
+        }
+        "assignment_expression" => record_web_state(node, w, false),
+        "import_statement" => {
+            let owner = w.current_owner();
+            let line = w.line_of(node);
+            super::web_links::extract_web_import(
+                node,
+                w.src,
+                &owner,
+                line,
+                &mut w.ctx,
+                &mut w.seen_refs,
+            );
+        }
+        "call_expression" | "new_expression" => {
+            let owner = w.current_owner();
+            let member = w.member_stack.last().cloned().unwrap_or_default();
+            let line = w.line_of(node);
+            super::web_links::extract_web_call(node, w.src, &owner, &member, line, &mut w.ctx);
+        }
         _ => {}
     }
     walk_web_children(node, w, exported, container_kind, total_lines);
@@ -385,80 +404,28 @@ fn handle_web_field(node: Node<'_>, w: &mut WebWalker<'_>) {
     });
 }
 
-fn handle_web_import(node: Node<'_>, w: &mut WebWalker<'_>) {
+fn record_web_state(node: Node<'_>, w: &mut WebWalker<'_>, is_init: bool) {
     let owner = w.current_owner();
-    let line = w.line_of(node);
-    if let Some(src_n) = node.child_by_field_name("source") {
-        let mod_spec = node_text(src_n, w.src).trim_matches(|c| c == '"' || c == '\'');
-        let seg = mod_spec.rsplit('/').next().unwrap_or(mod_spec).trim();
-        let clean = seg.split('.').next().unwrap_or(seg);
-        if !clean.is_empty() && clean != "." && clean != ".." {
-            push_unique_ref(&mut w.ctx, &mut w.seen_refs, &owner, clean, "import", line);
-        }
-    }
-    collect_pascal_refs_from_text(
-        node_text(node, w.src),
-        &owner,
-        "import",
-        line,
-        &mut w.ctx,
-        &mut w.seen_refs,
-    );
-}
-
-fn handle_web_call(node: Node<'_>, w: &mut WebWalker<'_>) {
-    let target_node = node
-        .child_by_field_name("function")
-        .or_else(|| node.child_by_field_name("constructor"));
-    let Some(func_n) = target_node else {
-        return;
+    let member = w.member_stack.last().cloned().unwrap_or_default();
+    let sctx = StateContext {
+        src: w.src,
+        line_offset: w.line_offset,
+        owner_type: &owner,
+        trigger_member: &member,
     };
-    let (recv, callee) = split_callee(&compact_whitespace(node_text(func_n, w.src)));
-    if callee.is_empty() {
-        return;
-    }
-    let owner = w.current_owner();
-    let line = w.line_of(node);
-    w.ctx.calls.push(ExtractedCall {
-        caller_type: owner.clone(),
-        caller_member: w.member_stack.last().cloned().unwrap_or_default(),
-        callee_name: callee.clone(),
-        receiver_hint: if node.kind() == "new_expression" {
-            "new".to_string()
-        } else {
-            recv
-        },
-        line,
-    });
-    if matches!(callee.as_str(), "setContext" | "provide") {
-        let arg = node
-            .child_by_field_name("arguments")
-            .map(|a| compact_whitespace(node_text(a, w.src)))
-            .unwrap_or_default();
-        w.ctx.di_regs.push(ExtractedDiReg {
-            lifetime: "Context".to_string(),
-            service_type: truncate_sig(&arg, 80),
-            impl_type: owner.clone(),
-            line,
-        });
-    } else if matches!(
-        callee.as_str(),
-        "emit" | "dispatch" | "dispatchEvent" | "addEventListener"
-    ) {
-        let arg = node
-            .child_by_field_name("arguments")
-            .map(|a| compact_whitespace(node_text(a, w.src)))
-            .unwrap_or_default();
-        let dir = if callee == "addEventListener" {
-            "receive"
-        } else {
-            "send"
-        };
-        w.ctx.messenger_links.push(ExtractedMessengerLink {
-            owner_type: owner,
-            direction: dir.to_string(),
-            message_type: truncate_sig(&arg, 80),
-            line,
-        });
+    if is_init {
+        extract_field_init_states(
+            node,
+            sctx,
+            &mut w.ctx.seen_states,
+            &mut w.ctx.state_transitions,
+        );
+    } else {
+        extract_assignment_states(
+            node,
+            sctx,
+            &mut w.ctx.seen_states,
+            &mut w.ctx.state_transitions,
+        );
     }
 }

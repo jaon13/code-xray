@@ -16,7 +16,10 @@ pub mod slice_types;
 pub mod sqlite_query;
 pub mod sqlite_schema;
 pub mod sqlite_writer;
+pub mod state_extractor;
+pub mod state_guards;
 pub mod ts_js_svelte_extractor;
+pub mod web_links;
 pub mod xaml_extractor;
 
 #[cfg(test)]
@@ -32,7 +35,7 @@ use rusqlite::Connection;
 use model::BuildSummary;
 use path_utils::{clean_canonical, to_slash};
 use project_resolver::resolve_workspace;
-use sqlite_schema::ensure_schema;
+use sqlite_schema::{ensure_schema, SCHEMA_VERSION};
 use sqlite_writer::write_incremental_delta;
 
 pub fn default_db_path(repo_root: &Path) -> PathBuf {
@@ -119,8 +122,16 @@ pub fn build_or_refresh_index(
 
     let (projects, files) = resolve_workspace(&canon_root, include_external);
     let mut conn = open_db(&target_db)?;
+    let existing_schema: Option<String> = conn
+        .query_row(
+            "SELECT value FROM meta WHERE key = 'schema_version'",
+            [],
+            |r| r.get(0),
+        )
+        .ok();
+    let effective_force = force || existing_schema.as_deref() != Some(SCHEMA_VERSION);
     let root_str = to_slash(&canon_root);
-    let stats = write_incremental_delta(&mut conn, &root_str, &projects, &files, force)?;
+    let stats = write_incremental_delta(&mut conn, &root_str, &projects, &files, effective_force)?;
 
     let total_types: usize = conn
         .query_row("SELECT COUNT(*) FROM types", [], |r| r.get::<_, i64>(0))
@@ -128,6 +139,12 @@ pub fn build_or_refresh_index(
         .max(0) as usize;
     let total_calls: usize = conn
         .query_row("SELECT COUNT(*) FROM calls", [], |r| r.get::<_, i64>(0))
+        .unwrap_or(0)
+        .max(0) as usize;
+    let total_state_transitions: usize = conn
+        .query_row("SELECT COUNT(*) FROM state_transitions", [], |r| {
+            r.get::<_, i64>(0)
+        })
         .unwrap_or(0)
         .max(0) as usize;
     let external_projects = projects.iter().filter(|p| p.is_external).count();
@@ -144,6 +161,7 @@ pub fn build_or_refresh_index(
         removed_files: stats.removed_files,
         total_types,
         total_calls,
+        total_state_transitions,
     })
 }
 

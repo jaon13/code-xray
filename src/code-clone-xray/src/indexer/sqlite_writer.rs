@@ -161,6 +161,9 @@ pub fn write_incremental_delta(
         let mut ins_msg = tx.prepare(
             "INSERT INTO messenger_links (file_id, owner_type, direction, message_type, line) VALUES (?1, ?2, ?3, ?4, ?5)",
         )?;
+        let mut ins_state = tx.prepare(
+            "INSERT INTO state_transitions (file_id, owner_type, machine_name, from_state, to_state, trigger_member, guard_expr, line) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        )?;
 
         for item in &processed {
             match item {
@@ -251,6 +254,18 @@ pub fn write_incremental_delta(
                             ml.direction,
                             ml.message_type,
                             ml.line as i64
+                        ])?;
+                    }
+                    for st in &data.state_transitions {
+                        ins_state.execute(params![
+                            file_id,
+                            st.owner_type,
+                            st.machine_name,
+                            st.from_state,
+                            st.to_state,
+                            st.trigger_member,
+                            st.guard_expr,
+                            st.line as i64
                         ])?;
                     }
                 }

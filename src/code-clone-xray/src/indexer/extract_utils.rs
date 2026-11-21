@@ -119,5 +119,6 @@ pub fn build_file_data(
         type_refs: ctx.type_refs,
         di_regs: ctx.di_regs,
         messenger_links: ctx.messenger_links,
+        state_transitions: ctx.state_transitions,
     }
 }

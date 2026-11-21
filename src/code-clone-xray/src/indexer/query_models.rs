@@ -14,6 +14,29 @@ pub struct StatusReport {
     pub type_refs: usize,
     pub di_registrations: usize,
     pub messenger_links: usize,
+    pub state_transitions: usize,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StateTransitionRow {
+    pub owner_type: String,
+    pub machine_name: String,
+    pub from_state: String,
+    pub to_state: String,
+    pub trigger_member: String,
+    pub guard_expr: String,
+    pub file: String,
+    pub line: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatesReport {
+    pub target: String,
+    pub machines: Vec<String>,
+    pub orphan_terminal_states: Vec<String>,
+    pub transitions: Vec<StateTransitionRow>,
 }
 
 #[derive(Clone, Serialize)]

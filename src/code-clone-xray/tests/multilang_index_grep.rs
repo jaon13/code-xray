@@ -228,3 +228,150 @@ fn standalone_python_repo_without_manifest_indexes_cleanly() {
     let hits = query_search(&conn, "compute_checksum", Some("member"), 10).expect("search");
     assert_eq!(hits.len(), 1);
 }
+
+#[test]
+fn extracts_polyglot_state_transitions_for_rust_svelte_ts_and_python() {
+    use code_clone_xray::indexer::sqlite_query::query_states;
+
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let root = tmp.path();
+
+    write_sample(
+        root,
+        "worker.rs",
+        r#"
+pub enum WorkerState { Idle, Running, Paused, Alarm }
+pub struct Worker { pub state: WorkerState }
+impl Worker {
+    pub fn new() -> Self { Self { state: WorkerState::Idle } }
+    pub fn start(&mut self) {
+        match self.state {
+            WorkerState::Idle => { self.state = WorkerState::Running; }
+            _ => {}
+        }
+    }
+    pub fn trip(&mut self) {
+        self.state = match self.state {
+            WorkerState::Running | WorkerState::Paused => WorkerState::Alarm,
+            _ => WorkerState::Idle,
+        };
+    }
+}
+"#,
+    );
+    write_sample(
+        root,
+        "Panel.svelte",
+        r#"<script lang="ts">
+let status = $state("Idle");
+export function begin() {
+    if (status == "Idle") {
+        status = "Running";
+    }
+}
+export function finish() {
+    if (status == "Running") {
+        status = "Done";
+    }
+}
+</script>
+<div>{status}</div>
+"#,
+    );
+    write_sample(
+        root,
+        "controller.ts",
+        r#"export class Controller {
+    phase: string = "Boot";
+    ready() {
+        switch (this.phase) {
+            case "Boot":
+                this.phase = "Ready";
+                break;
+        }
+    }
+}
+"#,
+    );
+    write_sample(
+        root,
+        "job.py",
+        r#"class Job:
+    def __init__(self):
+        self.phase = "Queued"
+    def run(self):
+        if self.phase == "Queued":
+            self.phase = "Active"
+    def fail(self):
+        self.phase = "Aborted"
+"#,
+    );
+
+    let summary = build_or_refresh_index(root, None, true, false).expect("build index");
+    assert!(
+        summary.total_state_transitions >= 9,
+        "expected >= 9 state transitions, got {}",
+        summary.total_state_transitions
+    );
+
+    let conn = open_db(&root.join(".xray").join("index.db")).expect("open db");
+    let status = query_status(&conn).expect("status");
+    assert!(status.state_transitions >= 9);
+
+    let rs_states = query_states(&conn, Some("Worker")).expect("rs states");
+    assert!(rs_states
+        .transitions
+        .iter()
+        .any(|t| t.machine_name == "WorkerState"
+            && t.from_state == "(init)"
+            && t.to_state == "Idle"));
+    assert!(rs_states
+        .transitions
+        .iter()
+        .any(|t| t.machine_name == "WorkerState"
+            && t.from_state == "Idle"
+            && t.to_state == "Running"));
+    assert!(rs_states
+        .transitions
+        .iter()
+        .any(|t| t.machine_name == "WorkerState"
+            && t.from_state == "Running"
+            && t.to_state == "Alarm"));
+    assert!(rs_states
+        .orphan_terminal_states
+        .contains(&"WorkerState.Alarm".to_string()));
+
+    let svelte_states = query_states(&conn, Some("Panel.svelte")).expect("svelte states");
+    assert!(svelte_states
+        .transitions
+        .iter()
+        .any(|t| t.from_state == "(init)" && t.to_state == "Idle"));
+    assert!(svelte_states
+        .transitions
+        .iter()
+        .any(|t| t.from_state == "Idle" && t.to_state == "Running" && t.trigger_member == "begin"));
+
+    let ts_states = query_states(&conn, Some("Controller")).expect("ts states");
+    assert!(ts_states
+        .transitions
+        .iter()
+        .any(|t| t.from_state == "(init)" && t.to_state == "Boot"));
+    assert!(ts_states
+        .transitions
+        .iter()
+        .any(|t| t.from_state == "Boot" && t.to_state == "Ready"));
+
+    let py_states = query_states(&conn, Some("Job")).expect("py states");
+    assert!(py_states
+        .transitions
+        .iter()
+        .any(|t| t.from_state == "(init)" && t.to_state == "Queued"));
+    assert!(py_states
+        .transitions
+        .iter()
+        .any(|t| t.from_state == "Queued" && t.to_state == "Active"));
+    assert!(py_states
+        .orphan_terminal_states
+        .iter()
+        .any(|s| s.ends_with(".Aborted")));
+}
